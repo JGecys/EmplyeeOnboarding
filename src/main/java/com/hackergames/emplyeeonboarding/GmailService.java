@@ -10,26 +10,33 @@ import com.google.api.services.gmail.Gmail;
 import com.google.api.services.gmail.model.Label;
 import com.google.api.services.gmail.model.ListMessagesResponse;
 import com.google.api.services.gmail.model.Message;
+import com.sree.textbytes.jtopia.Configuration;
+import com.sree.textbytes.jtopia.TermDocument;
+import com.sree.textbytes.jtopia.TermsExtractor;
 import opennlp.tools.doccat.DoccatModel;
 import opennlp.tools.doccat.DocumentCategorizerME;
 import opennlp.tools.doccat.DocumentSample;
 import opennlp.tools.doccat.DocumentSampleStream;
 import opennlp.tools.util.ObjectStream;
 import opennlp.tools.util.PlainTextByLineStream;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.output.StringBuilderWriter;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.oauth2.client.OAuth2ClientContext;
 import org.springframework.security.oauth2.client.OAuth2RestTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 
+import javax.mail.BodyPart;
 import javax.mail.MessagingException;
+import javax.mail.Multipart;
 import javax.mail.Session;
 import javax.mail.internet.MimeMessage;
 import java.io.*;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
-import org.apache.commons.io.IOUtils;
 
 @Service
 public class GmailService {
@@ -103,7 +110,6 @@ public class GmailService {
 
     public String getMessageCategory(String messageId) throws IOException, MessagingException {
         MimeMessage message = getMessage(messageId);
-
         InputStream in = new FileInputStream("/training/modelFile.train");
         DoccatModel model = new DoccatModel(in); // TODO: 2016-03-06 Needs training data
 
@@ -116,7 +122,80 @@ public class GmailService {
 
     public String getMessageContent(String messageId) throws IOException, MessagingException {
         MimeMessage message = getMessage(messageId);
-        return IOUtils.toString(message.getInputStream(), "UTF-8");
+//        String msg = IOUtils.toString(message.getInputStream(), "UTF-8");
+//        EmailUtils.extractClearText(m, null);
+        String msg = getClearText(message);
+//        if(message.getContentType().equals("text/html")){
+//            return Jsoup.parse(msg).body().text();
+//        }
+//        if(message.getContentType().equals("text/plain")){
+//            return msg;
+//        }
+//        Document document = Jsoup.parse(msg);
+//        document.select("a").remove();
+//        document.body().text();
+        msg = msg.replaceAll("https?://\\S+\\s?", "");
+        return msg;
+    }
+
+    private String getClearText(MimeMessage message) throws MessagingException, IOException {
+        MimeMessage m = (MimeMessage) message;
+        Object contentObject = m.getContent();
+        StringBuilder result = new StringBuilder();
+        if (contentObject instanceof Multipart) {
+            BodyPart clearTextPart = null;
+            BodyPart htmlTextPart = null;
+            Multipart content = (Multipart) contentObject;
+            int count = content.getCount();
+            for (int i = 0; i < count; i++) {
+                BodyPart part = content.getBodyPart(i);
+                if (part.isMimeType("text/plain")) {
+                    clearTextPart = part;
+                } else if (part.isMimeType("text/html")) {
+                    htmlTextPart = part;
+                }
+            }
+
+            if (clearTextPart != null) {
+                result.append((String) clearTextPart.getContent());
+            }
+            if (htmlTextPart != null) {
+                String html = (String) htmlTextPart.getContent();
+                result.append(Jsoup.parse(html).body().text());
+            }
+
+        } else if (contentObject instanceof String) // a simple text message
+        {
+            if(m.getContentType().startsWith("text/html")){
+                return Jsoup.parse((String) contentObject).body().text();
+            }
+            return (String) contentObject;
+        }
+        return result.toString();
+    }
+
+    public List<String> getKeywords(String messageId) throws IOException, MessagingException {
+        String content = getMessageContent(messageId);
+        if (content.isEmpty()) {
+            return Collections.EMPTY_LIST;
+        }
+        Configuration.setTaggerType("openNLP");
+        Configuration.setSingleStrength((int) Math.max(2, Math.pow(content.length() , 0.5d)/ 12));
+        Configuration.setNoLimitStrength(5);
+        // if tagger type is "openNLP" then give the openNLP POS tagger path
+        Configuration.setModelFileLocation("model/openNLP/en-pos-maxent.bin");
+        // if tagger type is "default" then give the default POS lexicon file
+        //Configuration.setModelFileLocation("model/default/english-lexicon.txt");
+        TermsExtractor termExtractor = new TermsExtractor();
+        TermDocument topiaDoc = new TermDocument();
+        topiaDoc = termExtractor.extractTerms(content);
+        //logger.info("Extracted terms : " + topiaDoc.getExtractedTerms());
+        Map<String, ArrayList<Integer>> finalFilteredTerms = topiaDoc.getFinalFilteredTerms();
+        List<String> keywords = new ArrayList<>();
+        for (Map.Entry<String, ArrayList<Integer>> e : finalFilteredTerms.entrySet()) {
+            keywords.add(e.getKey());
+        }
+        return keywords;
     }
 
     public void train(String messageId) throws IOException, MessagingException {

@@ -60,4 +60,11 @@ public class GmailTestController {
         return service.getMessageContent(messageId);
     }
 
+    @RequestMapping("/messages/{id}/keywords")
+    @ResponseBody
+    @ResponseStatus(HttpStatus.FOUND)
+    public List<String> getKeywords(@PathVariable("id") String messageId) throws IOException, MessagingException {
+        return service.getKeywords(messageId);
+    }
+
 }
