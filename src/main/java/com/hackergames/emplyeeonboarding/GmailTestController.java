@@ -46,13 +46,6 @@ public class GmailTestController {
         return service.getMessageCategory(messageId);
     }
 
-    @RequestMapping("/messages/{id}/train")
-    @ResponseBody
-    @ResponseStatus(HttpStatus.FOUND)
-    public void trainApi(@PathVariable("id") String messageId) throws IOException, MessagingException {
-        service.train(messageId);
-    }
-
     @RequestMapping("/messages/{id}/content")
     @ResponseBody
     @ResponseStatus(HttpStatus.FOUND)
