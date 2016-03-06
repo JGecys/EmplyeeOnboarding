@@ -141,13 +141,25 @@ public class GmailService {
         return myCategorizer.getBestCategory(outcomes);
     }
 
+    /**
+     * @param messageId email id
+     * @return  emails content without extras
+     * @throws IOException
+     * @throws MessagingException
+     */
     public String getMessageContent(String messageId) throws IOException, MessagingException {
         MimeMessage message = getMessage(messageId);
-        String msg = getClearText(message);
-        msg = msg.replaceAll("https?://\\S+\\s?", "");
+        String msg = getClearText(message); //ignores images etc, returns clear text
+        msg = msg.replaceAll("https?://\\S+\\s?", ""); //removes all links from email
         return msg;
     }
 
+    /**
+     * @param message mimemessege
+     * @return  clear text of email
+     * @throws MessagingException
+     * @throws IOException
+     */
     private String getClearText(MimeMessage message) throws MessagingException, IOException {
         MimeMessage m = message;
         Object contentObject = m.getContent();
@@ -192,10 +204,7 @@ public class GmailService {
         Configuration.setTaggerType("openNLP");
         Configuration.setSingleStrength((int) Math.max(2, Math.pow(content.length() , 0.5d)/ 12));
         Configuration.setNoLimitStrength(5);
-        // if tagger type is "openNLP" then give the openNLP POS tagger path
-        Configuration.setModelFileLocation("model/openNLP/en-pos-maxent.bin");
-        // if tagger type is "default" then give the default POS lexicon file
-        //Configuration.setModelFileLocation("model/default/english-lexicon.txt");
+        Configuration.setModelFileLocation("model/openNLP/en-pos-maxent.bin"); // uses openNLP data
         TermsExtractor termExtractor = new TermsExtractor();
         TermDocument topiaDoc = new TermDocument();
         topiaDoc = termExtractor.extractTerms(content);
